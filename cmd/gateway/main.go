@@ -17,7 +17,7 @@ func main() {
 	log.Println("connected to redis")
 
 	// Resolve the backend service URL.
-	target, err := server.NewBackend()
+	target, err := server.ParseBackendURL()
 	if err != nil {
 		log.Fatalf("invalid backend URL: %v", err)
 	}

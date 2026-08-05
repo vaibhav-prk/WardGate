@@ -5,8 +5,8 @@ import (
 	"os"
 )
 
-// NewBackend parses and returns the backend service URL.
-func NewBackend() (*url.URL, error) {
+// ParseBackendURL parses and returns the backend service URL.
+func ParseBackendURL() (*url.URL, error) {
 	backendURL := os.Getenv("BACKEND_URL")
 	if backendURL == "" {
 		backendURL = "http://localhost:8081"
