@@ -7,6 +7,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// NewRedisClient creates a new connection to redis.
 func NewRedisClient() (*redis.Client, error) {
 	redisURL := os.Getenv("REDIS_URL")
 

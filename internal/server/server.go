@@ -1,3 +1,5 @@
+// Package server wires the gateway's dependencies — router, Redis, and
+// middleware chain — into a single Server type ready to serve requests.
 package server
 
 import (
@@ -21,7 +23,7 @@ type Server struct {
 	proxy  *httputil.ReverseProxy
 }
 
-// NewServer constructs a Server, wires all middleware and routes
+// NewServer constructs a Server, wires all middleware and routes.
 func NewServer(rdb *redis.Client, target *url.URL) *Server {
 	s := &Server{
 		router: chi.NewRouter(),

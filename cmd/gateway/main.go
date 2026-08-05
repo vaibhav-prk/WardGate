@@ -1,3 +1,5 @@
+// Command gateway is the entry point for the Wardgate API gateway.
+// It connects dependencies and delegates all logic to internal packages.
 package main
 
 import (

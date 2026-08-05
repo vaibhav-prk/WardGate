@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// routes registers the gateway routes and middleware pipeline.
 func (s *Server) routes() {
 	s.router.Use(middleware.RequestID)
 	s.router.Use(middleware.Logger)
@@ -26,7 +27,6 @@ func (s *Server) routes() {
 		// r.Use(s.rateLimit)
 		// r.Use(s.policy.Handle)
 
-		// Proxy to mock backend
 		r.Handle("/*", s.proxy)
 	})
 }
