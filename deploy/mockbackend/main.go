@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 )
@@ -19,5 +20,7 @@ func main() {
 		})
 	})
 	fmt.Println("Mock backend listening on :8081")
-	http.ListenAndServe(":8081", nil)
+	if err := http.ListenAndServe(":8081", nil); err != nil {
+		log.Fatalf("mock backend error: %v", err)
+	}
 }
