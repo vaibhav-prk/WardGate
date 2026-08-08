@@ -11,16 +11,25 @@ import (
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"status":  "ok",
 			"path":    r.URL.Path,
 			"method":  r.Method,
 			"time":    time.Now().UTC().Format(time.RFC3339),
 			"headers": r.Header,
-		})
+		}); err != nil {
+			http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		}
 	})
+	srv := http.Server{
+		Addr:              ":8081",
+		Handler:           nil,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	fmt.Println("Mock backend listening on :8081")
-	if err := http.ListenAndServe(":8081", nil); err != nil {
+
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("mock backend error: %v", err)
 	}
 }

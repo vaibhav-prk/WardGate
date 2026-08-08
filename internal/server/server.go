@@ -39,8 +39,9 @@ func NewServer(rdb *redis.Client, target *url.URL) *Server {
 // Run starts the HTTP server on the given address.
 func (s *Server) Run() error {
 	srv := http.Server{
-		Addr:    ":8080",
-		Handler: s.router,
+		Addr:              ":8080",
+		Handler:           s.router,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	errCh := make(chan error, 1)
