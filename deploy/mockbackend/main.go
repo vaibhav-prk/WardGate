@@ -9,19 +9,8 @@ import (
 )
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	http.HandleFunc("/", handler)
 
-		if err := json.NewEncoder(w).Encode(map[string]any{
-			"status":  "ok",
-			"path":    r.URL.Path,
-			"method":  r.Method,
-			"time":    time.Now().UTC().Format(time.RFC3339),
-			"headers": r.Header,
-		}); err != nil {
-			http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		}
-	})
 	srv := http.Server{
 		Addr:              ":8081",
 		Handler:           nil,
@@ -31,5 +20,19 @@ func main() {
 
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("mock backend error: %v", err)
+	}
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"status":  "ok",
+		"path":    r.URL.Path,
+		"method":  r.Method,
+		"time":    time.Now().UTC().Format(time.RFC3339),
+		"headers": r.Header,
+	}); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 	}
 }
