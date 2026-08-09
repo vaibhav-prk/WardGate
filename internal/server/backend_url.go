@@ -3,17 +3,13 @@ package server
 import (
 	"errors"
 	"net/url"
-	"os"
+
+	"github.com/vaibhav-prk/Wardgate/internal/config"
 )
 
 // ParseBackendURL parses and returns the backend service URL.
-func ParseBackendURL() (*url.URL, error) {
-	backendURL := os.Getenv("BACKEND_URL")
-	if backendURL == "" {
-		backendURL = "http://localhost:8081"
-	}
-
-	target, err := url.Parse(backendURL)
+func ParseBackendURL(cfg *config.Config) (*url.URL, error) {
+	target, err := url.Parse(cfg.BackendURL)
 	if err != nil {
 		return nil, err
 	}

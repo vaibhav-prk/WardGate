@@ -2,21 +2,16 @@ package server
 
 import (
 	"context"
-	"os"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/vaibhav-prk/Wardgate/internal/config"
 )
 
 // NewRedisClient creates a new connection to redis.
-func NewRedisClient() (*redis.Client, error) {
-	redisURL := os.Getenv("REDIS_URL")
-
-	if redisURL == "" {
-		redisURL = "localhost:6379"
-	}
-
+func NewRedisClient(cfg *config.Config) (*redis.Client, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr: redisURL,
+		Addr:     cfg.RedisAddr,
+		PoolSize: cfg.PoolSize,
 	})
 
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
