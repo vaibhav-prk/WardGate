@@ -24,6 +24,7 @@ type Server struct {
 	router *chi.Mux
 	rdb    *redis.Client
 	proxy  *httputil.ReverseProxy
+	authn  *authn.Authenticator
 }
 
 // NewServer constructs a Server, wires all middleware and routes.
@@ -33,6 +34,7 @@ func NewServer(cfg *config.Config, rdb *redis.Client, target *url.URL) *Server {
 		router: chi.NewRouter(),
 		rdb:    rdb,
 		proxy:  httputil.NewSingleHostReverseProxy(target),
+		authn:  authn.New(cfg),
 	}
 
 	s.routes()
