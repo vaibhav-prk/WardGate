@@ -26,7 +26,7 @@ func (s *Server) routes() {
 	// --- API routes (zero-trust pipeline) ---
 	s.router.Route("/api", func(r chi.Router) {
 		r.Use(s.authn.Handle)
-		// r.Use(s.signer.Handle)
+		r.Use(s.signer.Handle)
 		// r.Use(s.replay.Handle)
 		// r.Use(s.rateLimit)
 		// r.Use(s.policy.Handle)

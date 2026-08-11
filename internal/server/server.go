@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/vaibhav-prk/Wardgate/internal/authn"
 	"github.com/vaibhav-prk/Wardgate/internal/config"
+	"github.com/vaibhav-prk/Wardgate/internal/signing"
 )
 
 // Server holds every dependency the gateway needs.
@@ -25,6 +26,7 @@ type Server struct {
 	rdb    *redis.Client
 	proxy  *httputil.ReverseProxy
 	authn  *authn.Authenticator
+	signer *signing.Signer
 }
 
 // NewServer constructs a Server, wires all middleware and routes.
@@ -35,6 +37,7 @@ func NewServer(cfg *config.Config, rdb *redis.Client, target *url.URL) *Server {
 		rdb:    rdb,
 		proxy:  httputil.NewSingleHostReverseProxy(target),
 		authn:  authn.New(cfg),
+		signer: signing.NewSigner(cfg),
 	}
 
 	s.routes()
