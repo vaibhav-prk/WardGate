@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/vaibhav-prk/Wardgate/internal/config"
@@ -10,23 +11,36 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatalf("fatal %v", err)
+	}
+}
+
+func run() error {
 	// Load env variables
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("invalid config: %v", err)
+		return fmt.Errorf("invalid config: %w", err)
 	}
 
 	// Initialize the Redis client.
 	rdb, err := server.NewRedisClient(cfg)
 	if err != nil {
-		log.Fatalf("failed to connect to redis %v", err)
+		return fmt.Errorf("failed to connect to redis %w", err)
 	}
+
+	defer func() {
+		log.Println("closing redis connection")
+		if cerr := rdb.Close(); cerr != nil {
+			log.Printf("error closing redis %v", cerr)
+		}
+	}()
 	log.Println("connected to redis")
 
 	// Resolve the backend service URL.
 	target, err := server.ParseBackendURL(cfg)
 	if err != nil {
-		log.Fatalf("invalid backend URL: %v", err)
+		return fmt.Errorf("invalid backend URL: %w", err)
 	}
 
 	// Construct and run the API gateway server.
@@ -34,7 +48,9 @@ func main() {
 	log.Printf("Gateway listening on %s", cfg.Addr)
 
 	if err := srv.Run(); err != nil {
-		log.Fatalf("server error: %v", err)
+		return fmt.Errorf("server error: %w", err)
 	}
 	log.Println("Server shut down gracefully")
+
+	return nil
 }
