@@ -13,7 +13,7 @@ services:
   mock-backend:
     build:
       context: ..
-      dockerfile: deploy/mock-backend/Dockerfile
+      dockerfile: deploy/mockbackend/Dockerfile
     ports:
       - "8081:8081"
 
@@ -33,4 +33,3 @@ services:
         condition: service_healthy
       mock-backend:
         condition: service_started
-

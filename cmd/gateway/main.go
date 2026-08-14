@@ -24,7 +24,7 @@ func main() {
 
 	// Construct and run the API gateway server.
 	srv := server.NewServer(rdb, target)
-	log.Println("Gateway listening on :8080")
+	log.Println("Wardgate Gateway is live and listening on :8080")
 
 	if err := srv.Run(); err != nil {
 		log.Fatalf("server error: %v", err)
