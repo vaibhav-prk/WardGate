@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-// RequestEvent logs an individual request's metadata in the sliding window
+// RequestEvent logs an individual request's metadata in the sliding window.
 type RequestEvent struct {
 	Timestamp  time.Time
 	Path       string
 	StatusCode int
 }
 
-// WindowStats holds calculated statistical signals over the sliding window
+// WindowStats holds calculated statistical signals over the sliding window.
 type WindowStats struct {
 	RequestCount int
 	CV           float64 // Coefficient of variation of inter-arrival times
@@ -22,7 +22,7 @@ type WindowStats struct {
 	FanOut       int     // Unique endpoints visited in window
 }
 
-// RollingTracker tracks sliding window traffic for a single entity (IP or User)
+// RollingTracker tracks sliding window traffic for a single entity (IP or User).
 type RollingTracker struct {
 	mu          sync.RWMutex
 	window      time.Duration
@@ -30,7 +30,7 @@ type RollingTracker struct {
 	events      []RequestEvent
 }
 
-// NewRollingTracker creates a tracker with a default sliding window (e.g., 60s) and burst window (e.g., 5s)
+// NewRollingTracker creates a tracker with a default sliding window (e.g., 60s) and burst window (e.g., 5s).
 func NewRollingTracker(window, shortWindow time.Duration) *RollingTracker {
 	return &RollingTracker{
 		window:      window,
@@ -39,7 +39,7 @@ func NewRollingTracker(window, shortWindow time.Duration) *RollingTracker {
 	}
 }
 
-// Record adds a new request event and trims expired events outside the window
+// Record adds a new request event and trims expired events outside the window.
 func (rt *RollingTracker) Record(path string, statusCode int, now time.Time) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
@@ -67,7 +67,7 @@ func (rt *RollingTracker) Record(path string, statusCode int, now time.Time) {
 	})
 }
 
-// ComputeStats calculates CV, Burst Ratio, Error Rate, and Fan-Out
+// ComputeStats calculates CV, Burst Ratio, Error Rate, and Fan-Out.
 func (rt *RollingTracker) ComputeStats(now time.Time) WindowStats {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
@@ -95,8 +95,8 @@ func (rt *RollingTracker) ComputeStats(now time.Time) WindowStats {
 	meanInterval := sumIntervals / float64(len(intervals))
 	var varianceSum float64
 	for _, dt := range intervals {
-		varianceSum += dt * dt
-
+		diff := dt - meanInterval
+		varianceSum += diff * diff
 	}
 	stdDev := math.Sqrt(varianceSum / float64(len(intervals)))
 
