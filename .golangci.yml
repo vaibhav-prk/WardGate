@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck      # unchecked error returns
+    - govet         # suspicious constructs
+    - staticcheck   # bugs + style, the big one
+    - unused        # dead code
+    - ineffassign   # assigned but never used
+    - bodyclose     # unclosed HTTP response bodies
+    - noctx         # HTTP calls without context
+    - gosec         # security issues — flags weak crypto, unescaped input etc.
+    - goconst       # repeated string literals that should be constants
+    - misspell
+
+  exclusions:
+    paths:
+      - "benchmarks/attackgen/.*_test\\.go"
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+
+run:
+  timeout: 5m

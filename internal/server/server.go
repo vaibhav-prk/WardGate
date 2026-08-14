@@ -14,21 +14,30 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/redis/go-redis/v9"
+	"github.com/vaibhav-prk/Wardgate/internal/authn"
+	"github.com/vaibhav-prk/Wardgate/internal/config"
+	"github.com/vaibhav-prk/Wardgate/internal/signing"
 )
 
 // Server holds every dependency the gateway needs.
 type Server struct {
+	cfg    *config.Config
 	router *chi.Mux
 	rdb    *redis.Client
 	proxy  *httputil.ReverseProxy
+	authn  *authn.Authenticator
+	signer *signing.Signer
 }
 
 // NewServer constructs a Server, wires all middleware and routes.
-func NewServer(rdb *redis.Client, target *url.URL) *Server {
+func NewServer(cfg *config.Config, rdb *redis.Client, target *url.URL) *Server {
 	s := &Server{
+		cfg:    cfg,
 		router: chi.NewRouter(),
 		rdb:    rdb,
 		proxy:  httputil.NewSingleHostReverseProxy(target),
+		authn:  authn.New(cfg),
+		signer: signing.NewSigner(cfg),
 	}
 
 	s.routes()
@@ -39,8 +48,9 @@ func NewServer(rdb *redis.Client, target *url.URL) *Server {
 // Run starts the HTTP server on the given address.
 func (s *Server) Run() error {
 	srv := http.Server{
-		Addr:    ":8080",
-		Handler: s.router,
+		Addr:              s.cfg.Addr,
+		Handler:           s.router,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	errCh := make(chan error, 1)
