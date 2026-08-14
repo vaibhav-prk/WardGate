@@ -95,7 +95,8 @@ func (rt *RollingTracker) ComputeStats(now time.Time) WindowStats {
 	meanInterval := sumIntervals / float64(len(intervals))
 	var varianceSum float64
 	for _, dt := range intervals {
-		varianceSum += math.Pow(dt-meanInterval, 2)
+		varianceSum += dt * dt
+
 	}
 	stdDev := math.Sqrt(varianceSum / float64(len(intervals)))
 
