@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -16,17 +17,23 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/vaibhav-prk/Wardgate/internal/authn"
 	"github.com/vaibhav-prk/Wardgate/internal/config"
+	"github.com/vaibhav-prk/Wardgate/internal/limiter"
+	"github.com/vaibhav-prk/Wardgate/internal/policy"
+	"github.com/vaibhav-prk/Wardgate/internal/replay"
 	"github.com/vaibhav-prk/Wardgate/internal/signing"
 )
 
 // Server holds every dependency the gateway needs.
 type Server struct {
-	cfg    *config.Config
-	router *chi.Mux
-	rdb    *redis.Client
-	proxy  *httputil.ReverseProxy
-	authn  *authn.Authenticator
-	signer *signing.Signer
+	cfg     *config.Config
+	router  *chi.Mux
+	rdb     *redis.Client
+	proxy   *httputil.ReverseProxy
+	authn   *authn.Authenticator
+	signer  *signing.Signer
+	replay  *replay.NonceChecker
+	limiter limiter.RateLimiter
+	policy  *policy.Engine
 }
 
 // NewServer constructs a Server, wires all middleware and routes.
@@ -38,7 +45,17 @@ func NewServer(cfg *config.Config, rdb *redis.Client, target *url.URL) *Server {
 		proxy:  httputil.NewSingleHostReverseProxy(target),
 		authn:  authn.New(cfg),
 		signer: signing.NewSigner(cfg),
+		replay: replay.New(cfg, rdb),
+		policy: policy.New(),
 	}
+
+	switch cfg.LimiterMode {
+	case "adaptive":
+		s.limiter = limiter.NewAdaptiveLimiter(rdb, cfg.BaseLimit, cfg.Window, 0.1, 0.005)
+	default:
+		s.limiter = limiter.NewStaticLimiter(rdb, cfg.BaseLimit, cfg.Window)
+	}
+	log.Printf("limiter mode: %s", s.limiter.Type())
 
 	s.routes()
 
