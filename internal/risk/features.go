@@ -1,3 +1,5 @@
+// Package risk provides behavioral risk scoring, sliding-window feature extraction,
+// and state transition management for zero-trust API rate limiting.
 package risk
 
 import (
