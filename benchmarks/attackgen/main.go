@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -56,7 +57,6 @@ func (c *AttackClient) generateToken(valid bool) string {
 	return tokenStr
 }
 
-// signRequest mirrors internal/signing/canonical.go exactly
 func (c *AttackClient) signRequest(method, path string, query url.Values, body []byte) string {
 	bodyHash := sha256.Sum256(body)
 	bodyHashHex := hex.EncodeToString(bodyHash[:])
@@ -77,13 +77,11 @@ func (c *AttackClient) signRequest(method, path string, query url.Values, body [
 	}
 	canonicalQuery := strings.Join(queryParts, "&")
 
-	// AWS SigV4 pattern from canonical.go:
-	// method \n path \n query \n headers \n \n bodyHash
 	canonical := strings.Join([]string{
 		method,
 		path,
 		canonicalQuery,
-		"", // empty headers (no X-Signed-Headers)
+		"",
 		"",
 		bodyHashHex,
 	}, "\n")
@@ -93,7 +91,7 @@ func (c *AttackClient) signRequest(method, path string, query url.Values, body [
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func (c *AttackClient) SendRequest(method, path string, query url.Values, body []byte, validAuth bool, tamperSig bool, nonce string) (int, string, error) {
+func (c *AttackClient) SendRequest(ctx context.Context, method, path string, query url.Values, body []byte, validAuth bool, tamperSig bool, nonce string) (int, string, error) {
 	sig := c.signRequest(method, path, query, body)
 	if tamperSig {
 		sig = sig + "tampered"
@@ -104,7 +102,7 @@ func (c *AttackClient) SendRequest(method, path string, query url.Values, body [
 		reqURL = fmt.Sprintf("%s?%s", reqURL, query.Encode())
 	}
 
-	req, err := http.NewRequest(method, reqURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, bytes.NewReader(body))
 	if err != nil {
 		return 0, "", err
 	}
@@ -121,7 +119,9 @@ func (c *AttackClient) SendRequest(method, path string, query url.Values, body [
 	if err != nil {
 		return 0, "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, string(respBody), nil
@@ -135,6 +135,7 @@ func main() {
 	requests := flag.Int("count", 10, "Number of requests to execute")
 	flag.Parse()
 
+	ctx := context.Background()
 	client := NewAttackClient(*target, *clientID, *secretKey)
 	fmt.Printf("[WardGate AttackGen] Running Scenario %s against %s (Client: %s)...\n", *scenario, *target, *clientID)
 
@@ -144,7 +145,7 @@ func main() {
 		for i := 1; i <= *requests; i++ {
 			nonce := fmt.Sprintf("nonce-s3-%d-%d", time.Now().UnixNano(), i)
 			payload := []byte(fmt.Sprintf(`{"user":"victim_%d","pass":"wrong_pass"}`, i))
-			status, _, _ := client.SendRequest("POST", "/api/login", nil, payload, false, false, nonce)
+			status, _, _ := client.SendRequest(ctx, "POST", "/api/login", nil, payload, false, false, nonce)
 			fmt.Printf("  -> Request #%d: Status %d (Expected: 401)\n", i, status)
 			time.Sleep(50 * time.Millisecond)
 		}
@@ -155,7 +156,7 @@ func main() {
 		for i := 1; i <= *requests; i++ {
 			ep := endpoints[i%len(endpoints)]
 			nonce := fmt.Sprintf("nonce-s4-%d-%d", time.Now().UnixNano(), i)
-			status, _, _ := client.SendRequest("GET", ep, nil, nil, true, false, nonce)
+			status, _, _ := client.SendRequest(ctx, "GET", ep, nil, nil, true, false, nonce)
 			fmt.Printf("  -> Hit %s: Status %d\n", ep, status)
 			time.Sleep(80 * time.Millisecond)
 		}
@@ -163,16 +164,16 @@ func main() {
 	case "s5":
 		fmt.Println("[S5: Replay Attack] Capturing valid signed request and replaying duplicate nonce...")
 		fixedNonce := fmt.Sprintf("fixed-replayed-nonce-%d", time.Now().Unix())
-		status1, _, _ := client.SendRequest("GET", "/api/users", nil, nil, true, false, fixedNonce)
+		status1, _, _ := client.SendRequest(ctx, "GET", "/api/users", nil, nil, true, false, fixedNonce)
 		fmt.Printf("  -> Legitimate Request (Nonce: %s): Status %d\n", fixedNonce, status1)
 		time.Sleep(100 * time.Millisecond)
-		status2, _, _ := client.SendRequest("GET", "/api/users", nil, nil, true, false, fixedNonce)
+		status2, _, _ := client.SendRequest(ctx, "GET", "/api/users", nil, nil, true, false, fixedNonce)
 		fmt.Printf("  -> Replay Attempt (Nonce: %s): Status %d (Expected: 429/403)\n", fixedNonce, status2)
 
 	case "s6":
 		fmt.Println("[S6: Parameter Tampering] Mutating signed payload post-signature...")
 		nonce := fmt.Sprintf("nonce-s6-%d", time.Now().UnixNano())
-		status, _, _ := client.SendRequest("POST", "/api/users", nil, []byte(`{"role":"admin"}`), true, true, nonce)
+		status, _, _ := client.SendRequest(ctx, "POST", "/api/users", nil, []byte(`{"role":"admin"}`), true, true, nonce)
 		fmt.Printf("  -> Tampered Signature Request: Status %d (Expected: 403)\n", status)
 
 	case "s7":
@@ -187,7 +188,7 @@ func main() {
 				delay = 50 * time.Millisecond
 			}
 
-			status, _, _ := client.SendRequest("GET", "/api/users", nil, nil, true, tamper, nonce)
+			status, _, _ := client.SendRequest(ctx, "GET", "/api/users", nil, nil, true, tamper, nonce)
 			fmt.Printf("  -> Request #%d (Tampered=%v): Status %d\n", i, tamper, status)
 
 			if (status == 429 || status == 403) && !detected {

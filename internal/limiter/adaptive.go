@@ -78,12 +78,12 @@ return {0, math.floor(score * 1000), eff_limit, current}
 // AdaptiveLimiter tightens the rate limit as risk score rises.
 // effective_limit = base_limit × max(min_fraction, 1 − score/100)
 type AdaptiveLimiter struct {
-	rdb        *redis.Client
-	script     *redis.Script
-	baseLimit  int
-	windowMS   int64
-	minFrac    float64 // floor ratio, e.g. 0.1 = never below 10% of base
-	lambda     float64 // decay constant for risk score
+	rdb       *redis.Client
+	script    *redis.Script
+	baseLimit int
+	windowMS  int64
+	minFrac   float64 // floor ratio, e.g. 0.1 = never below 10% of base
+	lambda    float64 // decay constant for risk score
 }
 
 func NewAdaptiveLimiter(rdb *redis.Client, baseLimit int, window time.Duration, minFraction, lambda float64) *AdaptiveLimiter {
@@ -100,9 +100,9 @@ func NewAdaptiveLimiter(rdb *redis.Client, baseLimit int, window time.Duration, 
 // Allow decays the risk score, applies penalty (via riskScore param),
 // computes the adaptive ceiling, and checks the sliding window — all atomic.
 func (al *AdaptiveLimiter) Allow(ctx context.Context, clientID string, riskScore float64) (Decision, error) {
-	rlKey   := fmt.Sprintf("ratelimit:adaptive:%s", clientID)
+	rlKey := fmt.Sprintf("ratelimit:adaptive:%s", clientID)
 	riskKey := fmt.Sprintf("risk:%s", clientID)
-	nowMS   := time.Now().UnixMilli()
+	nowMS := time.Now().UnixMilli()
 	memberID := fmt.Sprintf("%d:%d", nowMS, time.Now().UnixNano())
 
 	result, err := al.script.Run(ctx, al.rdb,
