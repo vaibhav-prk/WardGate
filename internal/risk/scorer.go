@@ -6,94 +6,131 @@ import (
 	"time"
 )
 
-// ThreatState represents the current classification of the client
-type ThreatState string
+type ClientState string
 
 const (
-	StateLowRisk    ThreatState = "LOW"
-	StateSuspicious ThreatState = "SUSPICIOUS"
-	StateHighRisk   ThreatState = "HIGH_RISK"
-	StateBanned     ThreatState = "BANNED"
+	StateLowRisk    ClientState = "LOW_RISK"
+	StateNormal     ClientState = "LOW_RISK"
+	StateSuspicious ClientState = "SUSPICIOUS"
+	StateHighRisk   ClientState = "HIGH_RISK"
+	StateBanned     ClientState = "BANNED"
 )
 
 type ScorerConfig struct {
-	Lambda              float64 // Decay constant
-	SuspiciousThreshold float64 // Threshold to transition to SUSPICIOUS
-	HighRiskThreshold   float64 // Threshold to transition to HIGH_RISK
-	RecoveryThreshold   float64 // Lower threshold required to recover (Hysteresis)
+	DecayHalfLife       time.Duration
+	SuspiciousThreshold float64
+	HighRiskThreshold   float64
+	RecoveryThreshold   float64
+	StaleClientTTL      time.Duration
 }
 
 func DefaultScorerConfig() ScorerConfig {
 	return ScorerConfig{
-		Lambda:              0.005, // Score halves approx every ~138 seconds
-		SuspiciousThreshold: 30.0,
+		DecayHalfLife:       30 * time.Second,
+		SuspiciousThreshold: 40.0,
 		HighRiskThreshold:   70.0,
-		RecoveryThreshold:   20.0,
+		RecoveryThreshold:   25.0,
+		StaleClientTTL:      10 * time.Minute,
 	}
 }
 
-type EntityRisk struct {
-	Score     float64
-	LastEvent time.Time
-	State     ThreatState
+type EntityRecord struct {
+	Score      float64
+	State      ClientState
+	LastUpdate time.Time
 }
 
 type Scorer struct {
-	mu     sync.RWMutex
-	config ScorerConfig
-	state  map[string]*EntityRisk
+	mu      sync.RWMutex
+	config  ScorerConfig
+	records map[string]*EntityRecord
 }
 
 func NewScorer(config ScorerConfig) *Scorer {
 	return &Scorer{
-		config: config,
-		state:  make(map[string]*EntityRisk),
+		config:  config,
+		records: make(map[string]*EntityRecord),
 	}
 }
 
-// ApplyDecay calculates score(t) = score(t0) * exp(-lambda * delta_t)
-func (s *Scorer) ApplyDecay(currentScore float64, lastTime, now time.Time) float64 {
-	dt := now.Sub(lastTime).Seconds()
-	if dt <= 0 {
-		return currentScore
+// applyDecay computes exponential decay: score(t) = score(t0) * exp(-lambda * delta_t)
+func (s *Scorer) applyDecay(score float64, lastUpdate, now time.Time) float64 {
+	elapsed := now.Sub(lastUpdate)
+	if elapsed <= 0 {
+		return score
 	}
-	return currentScore * math.Exp(-s.config.Lambda*dt)
+	lambda := math.Ln2 / s.config.DecayHalfLife.Seconds()
+	decayed := score * math.Exp(-lambda*elapsed.Seconds())
+	if decayed < 0.01 {
+		return 0
+	}
+	return decayed
 }
 
-// Evaluate updates and evaluates the risk score for an entity given new stats and penalties
-func (s *Scorer) Evaluate(entityID string, penalty float64, now time.Time) (float64, ThreatState) {
+// Evaluate updates client risk atomically with score capping, hysteresis, and state machine transitions
+func (s *Scorer) Evaluate(clientID string, penalty float64, now time.Time) (float64, ClientState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	entity, exists := s.state[entityID]
+	entity, exists := s.records[clientID]
 	if !exists {
-		entity = &EntityRisk{
-			Score:     0.0,
-			LastEvent: now,
-			State:     StateLowRisk,
+		entity = &EntityRecord{
+			Score:      0,
+			State:      StateLowRisk,
+			LastUpdate: now,
 		}
-		s.state[entityID] = entity
+		s.records[clientID] = entity
 	}
 
-	// 1. Apply Exponential Decay
-	decayedScore := s.ApplyDecay(entity.Score, entity.LastEvent, now)
+	decayedScore := s.applyDecay(entity.Score, entity.LastUpdate, now)
 
-	// 2. Add new penalty
-	newScore := decayedScore + penalty
+	// Issue 1 Fix: Cap score strictly between 0 and 100
+	newScore := math.Min(100.0, math.Max(0.0, decayedScore+penalty))
 	entity.Score = newScore
-	entity.LastEvent = now
+	entity.LastUpdate = now
 
-	// 3. State machine with Hysteresis
+	// Issue 2 Fix: Correct hysteresis transitions between LOW_RISK, SUSPICIOUS, and HIGH_RISK
 	switch {
 	case newScore >= s.config.HighRiskThreshold:
 		entity.State = StateHighRisk
 	case newScore >= s.config.SuspiciousThreshold:
+		// Hysteresis: only switch to Suspicious if not already HighRisk,
+		// or if the score has genuinely decayed below HighRiskThreshold
 		if entity.State != StateHighRisk || newScore < s.config.HighRiskThreshold {
 			entity.State = StateSuspicious
 		}
-	case newScore < s.config.RecoveryThreshold:
+	case newScore <= s.config.RecoveryThreshold:
+		// Full recovery down to LowRisk
 		entity.State = StateLowRisk
 	}
 
+	// Issue 4 Fix: Memory cleanup for stale clients whose score decayed to 0
+	if entity.Score == 0 && now.Sub(entity.LastUpdate) > s.config.StaleClientTTL {
+		delete(s.records, clientID)
+	}
+
 	return entity.Score, entity.State
+}
+
+// CleanupStale removes clients inactive beyond the configured TTL
+func (s *Scorer) CleanupStale(now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for id, entity := range s.records {
+		if now.Sub(entity.LastUpdate) > s.config.StaleClientTTL {
+			delete(s.records, id)
+		}
+	}
+}
+
+func (s *Scorer) GetEntity(clientID string) (EntityRecord, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rec, exists := s.records[clientID]
+	if !exists {
+		return EntityRecord{}, false
+	}
+	return *rec, true
 }
