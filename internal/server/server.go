@@ -20,6 +20,7 @@ import (
 	"github.com/vaibhav-prk/Wardgate/internal/limiter"
 	"github.com/vaibhav-prk/Wardgate/internal/policy"
 	"github.com/vaibhav-prk/Wardgate/internal/replay"
+	"github.com/vaibhav-prk/Wardgate/internal/risk"
 	"github.com/vaibhav-prk/Wardgate/internal/signing"
 )
 
@@ -34,19 +35,21 @@ type Server struct {
 	replay  *replay.NonceChecker
 	limiter limiter.RateLimiter
 	policy  *policy.Engine
+	tracker *risk.ClientTracker
 }
 
 // NewServer constructs a Server, wires all middleware and routes.
 func NewServer(cfg *config.Config, rdb *redis.Client, target *url.URL) *Server {
 	s := &Server{
-		cfg:    cfg,
-		router: chi.NewRouter(),
-		rdb:    rdb,
-		proxy:  httputil.NewSingleHostReverseProxy(target),
-		authn:  authn.New(cfg),
-		signer: signing.NewSigner(cfg),
-		replay: replay.New(cfg, rdb),
-		policy: policy.New(),
+		cfg:     cfg,
+		router:  chi.NewRouter(),
+		rdb:     rdb,
+		proxy:   httputil.NewSingleHostReverseProxy(target),
+		authn:   authn.New(cfg),
+		signer:  signing.NewSigner(cfg),
+		replay:  replay.New(cfg, rdb),
+		policy:  policy.New(),
+		tracker: risk.NewClientTracker(60*time.Second, risk.DefaultScorerConfig()),
 	}
 
 	switch cfg.LimiterMode {

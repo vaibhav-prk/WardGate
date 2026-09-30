@@ -27,6 +27,7 @@ services:
       - BACKEND_URL=http://mock-backend:8081
       - REDIS_URL=redis:6379
       - JWT_SECRET=${JWT_SECRET}
+      - LIMITER_MODE=${LIMITER_MODE:-static}
     depends_on:
       redis:
         condition: service_healthy

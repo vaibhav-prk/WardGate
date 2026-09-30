@@ -3,11 +3,13 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/vaibhav-prk/Wardgate/internal/authn"
 	"github.com/vaibhav-prk/Wardgate/internal/limiter"
+	"github.com/vaibhav-prk/Wardgate/internal/risk"
 )
 
 // routes registers the gateway routes and middleware pipeline.
@@ -36,27 +38,29 @@ func (s *Server) routes() {
 	})
 }
 
-// rateLimitMiddleware combines the limiter check and policy decision.
-// It passes 0 as penalty for static mode (ignored) and could pass
-// computed penalties for adaptive mode from request signals.
+// rateLimitMiddleware records the request in the risk tracker, computes
+// a behavioral penalty, and passes the resulting risk score to the limiter
+// and policy engine.
 func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientID := authn.GetClientID(r.Context())
+		now := time.Now()
 
-		// For now penalty is 0 for normal requests.
-		// TODO: compute penalty from RequestSignal (tamper/replay flags)
-		// once the signal-propagation context keys are added.
-		var penalty float64
+		// Record this request and get the updated risk score.
+		riskScore := s.tracker.RecordAndScore(clientID, risk.RequestEvent{
+			Timestamp:  now,
+			Endpoint:   r.URL.Path,
+			StatusCode: 0, // not known yet (pre-proxy)
+			FailedAuth: false,
+		})
 
-		decision, err := s.limiter.Allow(r.Context(), clientID, penalty)
+		decision, err := s.limiter.Allow(r.Context(), clientID, riskScore)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
-		// Let the policy engine escalate denials based on risk score.
-		// For static mode riskScore is 0 so it always returns ActionThrottle.
-		action := s.policy.Decide(r.Context(), decision, penalty)
+		action := s.policy.Decide(r.Context(), decision, riskScore)
 
 		switch action {
 		case limiter.ActionAllow:
