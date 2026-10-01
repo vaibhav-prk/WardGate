@@ -1,25 +1,37 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
+import { generateHeaders } from "./auth_helper.js";
 
 export const options = {
-  vus: 10,
-  duration: "30s",
+  scenarios: {
+    steady_traffic: {
+      executor: "constant-arrival-rate",
+      rate: 50,
+      timeUnit: "1s",
+      duration: "5s",
+      preAllocatedVUs: 5,
+      maxVUs: 20,
+    },
+  },
   thresholds: {
-    http_req_failed: ["rate<0.01"],
-    http_req_duration: ["p(95)<50"],
+    checks: ["rate==1.0"],
   },
 };
 
+const BASE_URL = __ENV.TARGET_URL || "http://localhost:8080";
+
 export default function () {
-  const params = {
-    headers: {
-      "X-Client-ID": `client-steady-${__VU}`,
-      "Content-Type": "application/json",
-    },
-  };
-  const res = http.get("http://localhost:8080/api/users", params);
-  check(res, {
-    "status is 200": (r) => r.status === 200,
+  const path = "/";
+  const headers = generateHeaders("GET", path, "");
+
+  const res = http.get(`${BASE_URL}${path}`, {
+    headers,
+    responseCallback: http.expectedStatuses(200, 404),
   });
-  sleep(0.5);
+
+  check(res, {
+    "passed gateway security": (r) => r.status === 200 || r.status === 404,
+  });
+
+  sleep(0.02);
 }

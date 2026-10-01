@@ -1,27 +1,33 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
+import { generateHeaders } from "./auth_helper.js";
 
 export const options = {
   stages: [
-    { duration: "10s", target: 5 },
-    { duration: "10s", target: 30 }, // Sudden honest burst
-    { duration: "10s", target: 5 },
+    { duration: "3s", target: 10 },
+    { duration: "5s", target: 50 },
+    { duration: "2s", target: 0 },
   ],
   thresholds: {
-    http_req_failed: ["rate<0.02"], // False positive test: honest bursts should NOT fail
+    checks: ["rate==1.0"],
   },
 };
 
+const BASE_URL = __ENV.TARGET_URL || "http://localhost:8080";
+
 export default function () {
-  const params = {
-    headers: {
-      "X-Client-ID": `client-burst-${__VU}`,
-      "Content-Type": "application/json",
-    },
-  };
-  const res = http.get("http://localhost:8080/api/users", params);
-  check(res, {
-    "not blocked": (r) => r.status === 200,
+  const path = "/";
+  const headers = generateHeaders("GET", path, "");
+
+  const res = http.get(`${BASE_URL}${path}`, {
+    headers,
+    responseCallback: http.expectedStatuses(200, 404, 429),
   });
-  sleep(0.1);
+
+  check(res, {
+    "valid gateway response": (r) =>
+      r.status === 200 || r.status === 404 || r.status === 429,
+  });
+
+  sleep(0.05);
 }

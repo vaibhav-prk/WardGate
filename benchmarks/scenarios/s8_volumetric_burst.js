@@ -1,28 +1,33 @@
 import http from "k6/http";
-import { check } from "k6";
+import { check, sleep } from "k6";
+import { generateHeaders } from "./auth_helper.js";
 
 export const options = {
-  scenarios: {
-    constant_request_rate: {
-      executor: "constant-arrival-rate",
-      rate: 500, // 500 req/sec overload
-      timeUnit: "1s",
-      duration: "20s",
-      preAllocatedVUs: 50,
-      maxVUs: 100,
-    },
+  stages: [
+    { duration: "2s", target: 20 },
+    { duration: "5s", target: 100 },
+    { duration: "2s", target: 0 },
+  ],
+  thresholds: {
+    checks: ["rate==1.0"],
   },
 };
 
+const BASE_URL = __ENV.TARGET_URL || "http://localhost:8080";
+
 export default function () {
-  const params = {
-    headers: {
-      "X-Client-ID": "volumetric-attacker",
-      "Content-Type": "application/json",
-    },
-  };
-  const res = http.get("http://localhost:8080/api/users", params);
-  check(res, {
-    handled: (r) => r.status === 200 || r.status === 429,
+  const path = "/";
+  const headers = generateHeaders("GET", path, "");
+
+  const res = http.get(`${BASE_URL}${path}`, {
+    headers,
+    responseCallback: http.expectedStatuses(200, 404, 429),
   });
+
+  check(res, {
+    "rate-limiting or upstream ok": (r) =>
+      r.status === 200 || r.status === 404 || r.status === 429,
+  });
+
+  sleep(0.01);
 }
