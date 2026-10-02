@@ -16,7 +16,7 @@ export const options = {
 const BASE_URL = __ENV.TARGET_URL || "http://localhost:8080";
 
 export default function () {
-  const path = "/";
+  const path = "/api/users";
   const headers = generateHeaders("GET", path, "");
 
   const res = http.get(`${BASE_URL}${path}`, {
