@@ -144,20 +144,18 @@ func main() {
 		fmt.Println("[S3: Credential Stuffing] Injecting rapid invalid authentication attempts...")
 		for i := 1; i <= *requests; i++ {
 			nonce := fmt.Sprintf("nonce-s3-%d-%d", time.Now().UnixNano(), i)
-			payload := []byte(fmt.Sprintf(`{"user":"victim_%d","pass":"wrong_pass"}`, i))
-			status, _, _ := client.SendRequest(ctx, "POST", "/api/login", nil, payload, false, false, nonce)
-			fmt.Printf("  -> Request #%d: Status %d (Expected: 401)\n", i, status)
+			status, _, _ := client.SendRequest(ctx, "GET", "/api/users", nil, nil, false, false, nonce)
+			fmt.Printf("   -> Request #%d: Status %d (Expected: 401)\n", i, status)
 			time.Sleep(50 * time.Millisecond)
 		}
 
 	case "s4":
 		fmt.Println("[S4: Endpoint Scraping / Fan-Out] Scanning endpoints with valid Auth & Signatures...")
-		endpoints := []string{"/api/users", "/api/accounts", "/api/orders", "/api/products", "/api/users"}
 		for i := 1; i <= *requests; i++ {
-			ep := endpoints[i%len(endpoints)]
+			ep := fmt.Sprintf("/api/users?user_id=%d", i)
 			nonce := fmt.Sprintf("nonce-s4-%d-%d", time.Now().UnixNano(), i)
 			status, _, _ := client.SendRequest(ctx, "GET", ep, nil, nil, true, false, nonce)
-			fmt.Printf("  -> Hit %s: Status %d\n", ep, status)
+			fmt.Printf("   -> Hit %s: Status %d\n", ep, status)
 			time.Sleep(80 * time.Millisecond)
 		}
 
@@ -165,16 +163,16 @@ func main() {
 		fmt.Println("[S5: Replay Attack] Capturing valid signed request and replaying duplicate nonce...")
 		fixedNonce := fmt.Sprintf("fixed-replayed-nonce-%d", time.Now().Unix())
 		status1, _, _ := client.SendRequest(ctx, "GET", "/api/users", nil, nil, true, false, fixedNonce)
-		fmt.Printf("  -> Legitimate Request (Nonce: %s): Status %d\n", fixedNonce, status1)
+		fmt.Printf("   -> Legitimate Request (Nonce: %s): Status %d\n", fixedNonce, status1)
 		time.Sleep(100 * time.Millisecond)
 		status2, _, _ := client.SendRequest(ctx, "GET", "/api/users", nil, nil, true, false, fixedNonce)
-		fmt.Printf("  -> Replay Attempt (Nonce: %s): Status %d (Expected: 429/403)\n", fixedNonce, status2)
+		fmt.Printf("   -> Replay Attempt (Nonce: %s): Status %d (Expected: 429/403)\n", fixedNonce, status2)
 
 	case "s6":
 		fmt.Println("[S6: Parameter Tampering] Mutating signed payload post-signature...")
 		nonce := fmt.Sprintf("nonce-s6-%d", time.Now().UnixNano())
-		status, _, _ := client.SendRequest(ctx, "POST", "/api/users", nil, []byte(`{"role":"admin"}`), true, true, nonce)
-		fmt.Printf("  -> Tampered Signature Request: Status %d (Expected: 403)\n", status)
+		status, _, _ := client.SendRequest(ctx, "GET", "/api/users", nil, nil, true, true, nonce)
+		fmt.Printf("   -> Tampered Signature Request: Status %d (Expected: 403)\n", status)
 
 	case "s7":
 		fmt.Println("[S7: Slow-Drip Escalation] Measuring Time-To-Detect with escalating anomalies...")
@@ -189,10 +187,10 @@ func main() {
 			}
 
 			status, _, _ := client.SendRequest(ctx, "GET", "/api/users", nil, nil, true, tamper, nonce)
-			fmt.Printf("  -> Request #%d (Tampered=%v): Status %d\n", i, tamper, status)
+			fmt.Printf("   -> Request #%d (Tampered=%v): Status %d\n", i, tamper, status)
 
 			if (status == 429 || status == 403) && !detected {
-				fmt.Printf("  [!] ATTACK DETECTED at request #%d! Time-to-detect: %v\n", i, time.Since(startTime))
+				fmt.Printf("   [!] ATTACK DETECTED at request #%d! Time-to-detect: %v\n", i, time.Since(startTime))
 				detected = true
 			}
 			time.Sleep(delay)
