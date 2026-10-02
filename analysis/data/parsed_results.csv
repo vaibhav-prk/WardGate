@@ -1,0 +1,5 @@
+scenario,mode,metric,value
+s1,static,http_req_duration,12.4
+s1,adaptive,http_req_duration,14.1
+s2,static,http_req_duration,11.2
+s2,adaptive,http_req_duration,15.8
