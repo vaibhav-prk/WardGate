@@ -5,3 +5,4 @@ plans/
 # Benchmark execution outputs
 benchmarks/results/
 analysis/plots/
+__pycache__/
